@@ -1,3 +1,50 @@
+const mongoose = require("mongoose");
+require('dotenv').config();
+
+
+const connectDB = async () => {
+    try {
+        const conn = await mongoose.connect(process.env.MONGO_URI);
+
+        console.log(`MongoDB Connected: ${conn.connection.host}`);
+    } 
+    catch (error) {
+        console.log(error);
+        process.exit(1);
+    }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
 MERN STACK DEPLOYMENT ON AZURE VM
 WITH PM2 AND NGINX REVERSE PROXY
 PRODUCTION STYLE DEPLOYMENT
@@ -110,7 +157,7 @@ sudo apt upgrade -y
 STEP 5 — INSTALL NODEJS
 =======================
 
-curl -fsSL [https://deb.nodesource.com/setup_20.x](https://deb.nodesource.com/setup_20.x) | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 
 sudo apt install nodejs -y
 
@@ -154,7 +201,7 @@ git clone YOUR_GITHUB_REPO_LINK
 
 Example:
 
-git clone [https://github.com/username/blog-application.git](https://github.com/username/blog-application.git)
+git clone https://github.com/username/blog-application.git
 
 cd blog-application
 
@@ -262,7 +309,6 @@ Delete everything and paste:
 
 server {
 
-```
 listen 80;
 
 server_name _;
@@ -294,7 +340,6 @@ location /api/ {
     proxy_set_header Host $host;
 
 }
-```
 
 }
 
@@ -373,7 +418,7 @@ http://PUBLIC_IP
 
 Example:
 
-[http://20.xx.xx.xx](http://20.xx.xx.xx)
+http://20.xx.xx.xx
 
 Backend API:
 
@@ -437,3 +482,41 @@ It forwards:
 /api    → Backend Port 5000
 
 Only Port 80 is publicly exposed.
+
+
+
+This is for stage 1 simple without setting the reverse proxy
+====================================================
+STEP 10 — START BACKEND
+=======================
+
+npm start
+
+
+====================================================
+STEP 13 — UPDATE FRONTEND API URL
+=================================
+
+Replace:
+
+localhost:5000
+
+with:
+
+http://PUBLIC_IP:5000
+
+Example:
+
+axios.get("http://20.xx.xx.xx:5000/api/posts")
+
+====================================================
+STEP 14 — START FRONTEND
+========================
+
+For Vite:
+
+npm run dev -- --host 0.0.0.0
+
+
+
+*/

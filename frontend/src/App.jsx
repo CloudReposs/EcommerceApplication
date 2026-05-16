@@ -59,7 +59,7 @@ function ProductCard({ product, cartEntry, onAdd, onIncrease, onDecrease }) {
             </div>
           ) : (
             <button className="btn-add" onClick={() => onAdd(product._id)}>
-              + Add to Cart
+              Add to Cart
             </button>
           )}
         </div>
@@ -73,14 +73,21 @@ function App() {
   const [page, setPage] = useState('products');
   const [products, setProducts] = useState([]);
   const [cartItems, setCartItems] = useState([]);
+  const [orders, setOrders] = useState([]);
+  
   const [fetchingProducts, setFetchingProducts] = useState(false);
   const [fetchingCart, setFetchingCart] = useState(false);
+  const [fetchingOrders, setFetchingOrders] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // Checkout state
+  const [checkoutAddress, setCheckoutAddress] = useState('');
+  const [checkoutMobile, setCheckoutMobile] = useState('');
+  const [checkoutPaymentDone, setCheckoutPaymentDone] = useState(false);
 
   const showToast = (message, type = 'success') => setToast({ message, type });
   const closeToast = useCallback(() => setToast(null), []);
 
-  // cartMap: productId → { cartItemId, quantity }
   const cartMap = cartItems.reduce((map, item) => {
     if (item.productId?._id) {
       map[item.productId._id] = { cartItemId: item._id, quantity: item.quantity };
@@ -100,7 +107,7 @@ function App() {
       const data = await res.json();
       setProducts(data);
     } catch {
-      showToast('Failed to fetch products. Is the server running?', 'error');
+      showToast('Failed to fetch products.', 'error');
     } finally {
       setFetchingProducts(false);
     }
@@ -119,12 +126,24 @@ function App() {
     }
   }, []);
 
+  const fetchOrders = async () => {
+    setFetchingOrders(true);
+    try {
+      const res = await fetch(`${API}/orders`);
+      const data = await res.json();
+      setOrders(data);
+    } catch {
+      showToast('Failed to fetch orders.', 'error');
+    } finally {
+      setFetchingOrders(false);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
     fetchCart();
   }, [fetchCart]);
 
-  // Add a product to cart (first time)
   const handleAdd = async (productId) => {
     try {
       const res = await fetch(`${API}/cart`, {
@@ -133,7 +152,7 @@ function App() {
         body: JSON.stringify({ productId }),
       });
       if (res.ok) {
-        showToast('Added to cart!');
+        showToast('Added to cart');
         fetchCart();
       } else {
         showToast('Failed to add item.', 'error');
@@ -143,7 +162,6 @@ function App() {
     }
   };
 
-  // Increase qty of existing cart item
   const handleIncrease = async (cartItemId, currentQty) => {
     try {
       const res = await fetch(`${API}/cart/${cartItemId}`, {
@@ -155,7 +173,6 @@ function App() {
         setCartItems((prev) =>
           prev.map((i) => i._id === cartItemId ? { ...i, quantity: currentQty + 1 } : i)
         );
-        showToast('Quantity updated!');
       } else {
         showToast('Failed to update quantity.', 'error');
       }
@@ -164,14 +181,13 @@ function App() {
     }
   };
 
-  // Decrease qty — remove if qty reaches 0
   const handleDecrease = async (cartItemId, currentQty) => {
     if (currentQty <= 1) {
       try {
         const res = await fetch(`${API}/cart/${cartItemId}`, { method: 'DELETE' });
         if (res.ok) {
           setCartItems((prev) => prev.filter((i) => i._id !== cartItemId));
-          showToast('Removed from cart.');
+          showToast('Removed from cart');
         } else {
           showToast('Failed to remove item.', 'error');
         }
@@ -189,7 +205,6 @@ function App() {
           setCartItems((prev) =>
             prev.map((i) => i._id === cartItemId ? { ...i, quantity: currentQty - 1 } : i)
           );
-          showToast('Quantity updated.');
         } else {
           showToast('Failed to update quantity.', 'error');
         }
@@ -199,13 +214,12 @@ function App() {
     }
   };
 
-  // Remove from cart page
   const handleRemove = async (cartItemId) => {
     try {
       const res = await fetch(`${API}/cart/${cartItemId}`, { method: 'DELETE' });
       if (res.ok) {
         setCartItems((prev) => prev.filter((i) => i._id !== cartItemId));
-        showToast('Item removed from cart.');
+        showToast('Item removed');
       } else {
         showToast('Failed to remove item.', 'error');
       }
@@ -214,9 +228,21 @@ function App() {
     }
   };
 
-  // Place order
-  const placeOrder = async () => {
-    if (cartItems.length === 0) { showToast('Your cart is empty!', 'error'); return; }
+  const handleProceedToCheckout = () => {
+    if (cartItems.length === 0) { 
+      showToast('Your cart is empty.', 'error'); 
+      return; 
+    }
+    setPage('checkout');
+  };
+
+  const placeOrder = async (e) => {
+    e.preventDefault();
+    if (cartItems.length === 0) return;
+    if (!checkoutAddress || !checkoutMobile || !checkoutPaymentDone) {
+      showToast('Please fill all details and confirm payment.', 'error');
+      return;
+    }
 
     const items = cartItems.map((item) => ({
       productId: item.productId._id,
@@ -230,13 +256,23 @@ function App() {
       const res = await fetch(`${API}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items, totalAmount }),
+        body: JSON.stringify({ 
+          items, 
+          totalAmount,
+          address: checkoutAddress,
+          mobile: checkoutMobile,
+          paymentDone: checkoutPaymentDone
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        showToast('🎉 Order placed successfully!');
+        showToast('Order placed successfully.');
         setCartItems([]);
-        setPage('products');
+        setCheckoutAddress('');
+        setCheckoutMobile('');
+        setCheckoutPaymentDone(false);
+        setPage('orders');
+        fetchOrders();
       } else {
         showToast(data.error || 'Failed to place order.', 'error');
       }
@@ -249,11 +285,9 @@ function App() {
     <div className="app">
       <Toast toast={toast} onClose={closeToast} />
 
-      {/* Header */}
       <header className="header">
         <div className="header-brand">
-          <span className="brand-icon">🛒</span>
-          <span className="brand-name">ShopEasy</span>
+          <span className="brand-name">ShopEasy.</span>
         </div>
         <nav className="header-nav">
           <button
@@ -263,13 +297,19 @@ function App() {
             Products
           </button>
           <button
-            className={`nav-btn${page === 'cart' ? ' active' : ''}`}
+            className={`nav-btn${page === 'cart' || page === 'checkout' ? ' active' : ''}`}
             onClick={() => { setPage('cart'); fetchCart(); }}
           >
             Cart
             {totalItemsInCart > 0 && (
               <span className="cart-badge">{totalItemsInCart}</span>
             )}
+          </button>
+          <button
+            className={`nav-btn${page === 'orders' ? ' active' : ''}`}
+            onClick={() => { setPage('orders'); fetchOrders(); }}
+          >
+            Orders
           </button>
         </nav>
       </header>
@@ -278,12 +318,12 @@ function App() {
       {page === 'products' && (
         <main className="main">
           <div className="page-title">
-            <h2>Available Products</h2>
+            <h2>Collection</h2>
             <p className="page-sub">{products.length} items available</p>
           </div>
           {fetchingProducts && <div className="spinner-wrap"><div className="spinner"></div></div>}
           {!fetchingProducts && products.length === 0 && (
-            <p className="empty">No products found. Is the server running?</p>
+            <p className="empty">No products found.</p>
           )}
           <div className="product-grid">
             {products.map((product) => (
@@ -304,13 +344,12 @@ function App() {
       {page === 'cart' && (
         <main className="main">
           <div className="page-title">
-            <h2>Your Cart</h2>
+            <h2>Shopping Cart</h2>
             <p className="page-sub">{totalItemsInCart} item{totalItemsInCart !== 1 ? 's' : ''}</p>
           </div>
           {fetchingCart && <div className="spinner-wrap"><div className="spinner"></div></div>}
           {!fetchingCart && cartItems.length === 0 && (
             <div className="empty-cart">
-              <div className="empty-cart-icon">🛒</div>
               <p>Your cart is empty.</p>
               <button className="btn-shop" onClick={() => setPage('products')}>Browse Products</button>
             </div>
@@ -321,14 +360,14 @@ function App() {
                 {cartItems.map((item) => (
                   <div className="cart-item" key={item._id}>
                     <img
-                      src={item.productId?.image || 'https://placehold.co/80x80?text=?'}
+                      src={item.productId?.image || 'https://placehold.co/80x80?text=No+Image'}
                       alt={item.productId?.name}
                       className="cart-item-img"
-                      onError={(e) => { e.target.src = 'https://placehold.co/80x80?text=?'; }}
+                      onError={(e) => { e.target.src = 'https://placehold.co/80x80?text=No+Image'; }}
                     />
                     <div className="cart-item-info">
                       <h4>{item.productId?.name}</h4>
-                      <p className="unit-price">₹{item.productId?.price?.toLocaleString()} each</p>
+                      <p className="unit-price">₹{item.productId?.price?.toLocaleString()}</p>
                     </div>
                     <div className="qty-controls">
                       <button
@@ -347,7 +386,7 @@ function App() {
                         ₹{((item.productId?.price || 0) * item.quantity).toLocaleString()}
                       </span>
                       <button className="btn-remove" onClick={() => handleRemove(item._id)}>
-                        🗑️ Remove
+                        Remove
                       </button>
                     </div>
                   </div>
@@ -355,17 +394,17 @@ function App() {
               </div>
 
               <div className="cart-summary">
-                <h3>Order Summary</h3>
+                <h3>Summary</h3>
                 <div className="summary-row">
-                  <span>Items ({totalItemsInCart})</span>
+                  <span>Subtotal ({totalItemsInCart} items)</span>
                   <span>₹{cartTotal.toLocaleString()}</span>
                 </div>
                 <div className="summary-row summary-total">
-                  <span>Total</span>
+                  <span>Total Amount</span>
                   <strong>₹{cartTotal.toLocaleString()}</strong>
                 </div>
-                <button className="btn-order" onClick={placeOrder}>
-                  Place Order →
+                <button className="btn-order" onClick={handleProceedToCheckout}>
+                  Proceed to Checkout
                 </button>
               </div>
             </div>
@@ -373,8 +412,106 @@ function App() {
         </main>
       )}
 
+      {/* Checkout Page */}
+      {page === 'checkout' && (
+        <main className="main">
+          <div className="page-title">
+            <h2>Checkout</h2>
+            <p className="page-sub">Complete your details to place the order.</p>
+          </div>
+          <div className="checkout-layout">
+            <form className="checkout-form" onSubmit={placeOrder}>
+              <div className="form-group">
+                <label>Delivery Address</label>
+                <textarea 
+                  required
+                  rows="3"
+                  value={checkoutAddress} 
+                  onChange={e => setCheckoutAddress(e.target.value)} 
+                  placeholder="Enter full address"
+                />
+              </div>
+              <div className="form-group">
+                <label>Mobile Number</label>
+                <input 
+                  type="tel"
+                  required
+                  value={checkoutMobile} 
+                  onChange={e => setCheckoutMobile(e.target.value)} 
+                  placeholder="Enter 10-digit mobile number"
+                />
+              </div>
+              <div className="form-group checkbox-group">
+                <input 
+                  type="checkbox" 
+                  id="paymentDone"
+                  required
+                  checked={checkoutPaymentDone}
+                  onChange={e => setCheckoutPaymentDone(e.target.checked)}
+                />
+                <label htmlFor="paymentDone">I confirm that payment is done</label>
+              </div>
+              <div className="checkout-actions">
+                <button type="button" className="btn-secondary" onClick={() => setPage('cart')}>Back to Cart</button>
+                <button type="submit" className="btn-primary">Confirm Order (₹{cartTotal.toLocaleString()})</button>
+              </div>
+            </form>
+          </div>
+        </main>
+      )}
+
+      {/* Orders Page */}
+      {page === 'orders' && (
+        <main className="main">
+          <div className="page-title">
+            <h2>Order History</h2>
+            <p className="page-sub">Review your past orders.</p>
+          </div>
+          {fetchingOrders && <div className="spinner-wrap"><div className="spinner"></div></div>}
+          {!fetchingOrders && orders.length === 0 && (
+            <div className="empty-state">
+              <p>You haven't placed any orders yet.</p>
+              <button className="btn-shop" onClick={() => setPage('products')}>Browse Products</button>
+            </div>
+          )}
+          {orders.length > 0 && (
+            <div className="orders-list">
+              {orders.map((order) => (
+                <div className="order-card" key={order._id}>
+                  <div className="order-header">
+                    <div className="order-meta">
+                      <span className="order-id">Order #{order._id.slice(-6).toUpperCase()}</span>
+                      <span className="order-date">{new Date(order.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="order-status">
+                      <span className="status-badge success">Payment Done</span>
+                    </div>
+                  </div>
+                  <div className="order-details">
+                    <p><strong>Deliver to:</strong> {order.address}</p>
+                    <p><strong>Contact:</strong> {order.mobile}</p>
+                  </div>
+                  <div className="order-items">
+                    {order.items.map((item, idx) => (
+                      <div className="order-item-row" key={idx}>
+                        <span>{item.quantity} × {item.name}</span>
+                        <span>₹{(item.price * item.quantity).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="order-footer">
+                    <span>Total Amount</span>
+                    <strong>₹{order.totalAmount.toLocaleString()}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </main>
+      )}
+
       <footer className="footer">
-        <p>ShopEasy &copy; 2025 — MERN E-Commerce App</p>
+        <p>ShopEasy &copy; {new Date().getFullYear()}</p>
       </footer>
     </div>
   );
